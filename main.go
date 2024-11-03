@@ -39,6 +39,11 @@ func (m *model) spawnItem() {
 	m.table[row][col] = item
 }
 
+func (m *model) spawnEnemy() {
+	row, col := m.randomFreeCoordinates()
+	m.table[row][col] = enemy
+}
+
 func (m *model) randomFreeCoordinates() (row, col int) {
 	row, col = randomCoordinates()
 
@@ -57,16 +62,59 @@ func randomCoordinates() (row, col int) {
 }
 
 func (m *model) movePlayer(row, col int) {
+	if m.gameOver {
+		return
+	}
+
 	m.table[m.playerRow][m.playerCol] = empty
+
+	if m.table[row][col] == enemy {
+		m.gameOver = true
+		return
+	}
 
 	if m.table[row][col] == item {
 		m.score++
 		m.spawnItem()
+		m.spawnEnemy()
 	}
 
 	m.table[row][col] = player
 	m.playerRow = row
 	m.playerCol = col
+}
+
+func (m *model) moveEnemies() {
+	for row := 1; row < tableHeight-1; row++ {
+		for col := 1; col < tableWidth-1; col++ {
+			if m.table[row][col] == enemy {
+				// Move enemy randomly to one of the four directly neighbooring cells if it is empty
+				// or contains the player. Borders, items and other enemies will block enemy moves though.
+
+				neighboors := [4][2]int{
+					[2]int{row - 1, col}, // Top neighboor.
+					[2]int{row, col + 1}, // Right neighboor.
+					[2]int{row + 1, col}, // Bottom neighboor.
+					[2]int{row, col - 1}, // Right neighboor.
+				}
+
+				targetIndex := rand.Intn(len(neighboors))
+				targetRow := neighboors[targetIndex][0]
+				targetCol := neighboors[targetIndex][1]
+
+				if m.table[targetRow][targetCol] == empty {
+					// Target cell is empty. Move enemy and clear the old one.
+					m.table[targetRow][targetCol] = enemy
+					m.table[row][col] = empty
+				} else if m.table[targetRow][targetCol] == player {
+					// Target cell contains the player. Attack and stop further processing, this game is over!
+					m.gameOver = true
+
+					return
+				}
+			}
+		}
+	}
 }
 
 func (m *model) playerUp() {
@@ -138,18 +186,30 @@ func (m *model) Init() tea.Cmd {
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		if m.gameOver {
+			switch msg.String() {
+			case "Ctrl+C", "q":
+				return m, tea.Quit
+			case "enter":
+				m.init()
+				return m, nil
+			}
+		}
 		switch msg.String() {
 		case "Ctrl+C", "q":
 			return m, tea.Quit
 		case "up":
 			m.playerUp()
+			m.moveEnemies()
 		case "down":
 			m.playerDown()
+			m.moveEnemies()
 		case "left":
 			m.playerLeft()
+			m.moveEnemies()
 		case "right":
 			m.playerRight()
-
+			m.moveEnemies()
 		}
 
 	}
@@ -158,6 +218,17 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *model) View() string {
 	builder := strings.Builder{}
+
+	if m.gameOver {
+		builder.WriteString("\n\n\n\n\n")
+		builder.WriteString("          You died, Game Over!")
+		builder.WriteString("\n\n")
+		builder.WriteString(fmt.Sprintf("          Your score: %d", m.score))
+		builder.WriteString("\n\n")
+		builder.WriteString("          Press enter to restart or q to quit")
+
+		return builder.String()
+	}
 
 	for _, row := range m.table {
 		for _, cell := range row {
