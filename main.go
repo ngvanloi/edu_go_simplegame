@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"math/rand"
 	"os"
 	"strings"
 
@@ -28,10 +29,40 @@ type model struct {
 
 	playerRow int
 	playerCol int
+
+	score    int
+	gameOver bool
 }
 
-func (m *model) move(row, col int) {
-	m.table[m.playerRow][m.playerCol] = 0
+func (m *model) spawnItem() {
+	row, col := m.randomFreeCoordinates()
+	m.table[row][col] = item
+}
+
+func (m *model) randomFreeCoordinates() (row, col int) {
+	row, col = randomCoordinates()
+
+	for m.table[row][col] != empty {
+		row, col = randomCoordinates()
+	}
+	return
+}
+
+func randomCoordinates() (row, col int) {
+	row = rand.Intn(tableHeight-2) + 1
+	col = rand.Intn(tableWidth-2) + 1
+
+	return row, col
+
+}
+
+func (m *model) movePlayer(row, col int) {
+	m.table[m.playerRow][m.playerCol] = empty
+
+	if m.table[row][col] == item {
+		m.score++
+		m.spawnItem()
+	}
 
 	m.table[row][col] = player
 	m.playerRow = row
@@ -42,53 +73,62 @@ func (m *model) playerUp() {
 	if m.playerRow <= 1 {
 		return
 	}
-	m.move(m.playerRow-1, m.playerCol)
+	m.movePlayer(m.playerRow-1, m.playerCol)
 }
 
 func (m *model) playerDown() {
 	if m.playerRow >= tableHeight-2 {
 		return
 	}
-	m.move(m.playerRow+1, m.playerCol)
+	m.movePlayer(m.playerRow+1, m.playerCol)
 }
 
 func (m *model) playerLeft() {
 	if m.playerCol <= 1 {
 		return
 	}
-	m.move(m.playerRow, m.playerCol-1)
+	m.movePlayer(m.playerRow, m.playerCol-1)
 }
 
 func (m *model) playerRight() {
 	if m.playerCol >= tableWidth-2 {
 		return
 	}
-	m.move(m.playerRow, m.playerCol+1)
+	m.movePlayer(m.playerRow, m.playerCol+1)
 }
 
-func newModel() *model {
-	model := &model{}
+func (m *model) init() {
 
-	model.table[0][0] = corner
-	model.table[0][tableWidth-1] = corner
-	model.table[tableHeight-1][0] = corner
-	model.table[tableHeight-1][tableWidth-1] = corner
+	for row := 0; row < tableHeight; row++ {
+		for col := 0; col < tableWidth; col++ {
+			m.table[row][col] = empty
+		}
+	}
+
+	m.playerRow = 0
+	m.playerCol = 0
+	m.score = 0
+	m.gameOver = false
+
+	m.table[0][0] = corner
+	m.table[0][tableWidth-1] = corner
+	m.table[tableHeight-1][0] = corner
+	m.table[tableHeight-1][tableWidth-1] = corner
 
 	for col := 1; col < tableWidth-1; col++ {
-		model.table[0][col] = lineHorizontal
-		model.table[tableHeight-1][col] = lineHorizontal
+		m.table[0][col] = lineHorizontal
+		m.table[tableHeight-1][col] = lineHorizontal
 	}
 
 	for row := 1; row < tableHeight-1; row++ {
-		model.table[row][0] = lineVertical
-		model.table[row][tableWidth-1] = lineVertical
+		m.table[row][0] = lineVertical
+		m.table[row][tableWidth-1] = lineVertical
 	}
 
-	model.playerRow = 10
-	model.playerCol = 10
-	model.table[model.playerRow][model.playerCol] = player
-
-	return model
+	m.playerRow = 10
+	m.playerCol = 10
+	m.table[m.playerRow][m.playerCol] = player
+	m.spawnItem()
 }
 
 func (m *model) Init() tea.Cmd {
@@ -121,11 +161,7 @@ func (m *model) View() string {
 
 	for _, row := range m.table {
 		for _, cell := range row {
-			if cell == 0 {
-				builder.WriteRune(empty)
-			} else {
-				builder.WriteRune(cell)
-			}
+			builder.WriteRune(cell)
 		}
 		builder.WriteString("\n")
 	}
@@ -133,7 +169,9 @@ func (m *model) View() string {
 }
 
 func main() {
-	model := newModel()
+	model := &model{}
+
+	model.init()
 
 	program := tea.NewProgram(model, tea.WithAltScreen())
 
